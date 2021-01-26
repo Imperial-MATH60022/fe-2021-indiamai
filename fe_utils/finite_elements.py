@@ -25,6 +25,7 @@ def lagrange_points(cell, degree):
     #     return np.array([[i/degree] for i in range(degree+1)])
     # indices1 = [[i/degree, j/degree] for i in range(degree+1) for j in range(degree+1) if i+j <= degree]
 
+    # generalised dimension
     it = itertools.product(*[[i for i in range(degree+1)] for j in range(dim)])
     arr = np.array(list(it))
     indices = arr[np.sum(arr,axis = 1) <=  degree]
@@ -44,8 +45,14 @@ def vandermonde_matrix(cell, degree, points, grad=False):
     The implementation of this function is left as an :ref:`exercise
     <ex-vandermonde>`.
     """
+    dim = cell.dim
+    if dim == 1:
+        a = lambda x : [x**i for i in range(degree + 1)]
+        return np.array([a(x) for (x,) in points])
 
-    raise NotImplementedError
+    a = lambda x,y : np.concatenate([[x**i*y**j for i,j in zip(range(k,-1,-1),range(k+1))] for k in range(degree+1)])
+    return np.array([a(x,y) for (x,y) in points])
+
 
 
 class FiniteElement(object):
