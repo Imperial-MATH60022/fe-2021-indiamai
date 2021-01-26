@@ -2,6 +2,7 @@
 from __future__ import division
 import numpy as np
 from .reference_elements import ReferenceInterval, ReferenceTriangle
+from functools import reduce
 np.seterr(invalid='ignore', divide='ignore')
 
 
@@ -18,9 +19,11 @@ def lagrange_points(cell, degree):
     <ex-lagrange-points>`.
 
     """
-
-    raise NotImplementedError
-
+    dim = cell.dim
+    if dim == 1:
+        return np.array([[i/degree] for i in range(degree+1)])
+    indices = [[i/degree, j/degree] for i in range(degree+1) for j in range(degree+1) if i+j <= degree]
+    return np.array(indices)
 
 def vandermonde_matrix(cell, degree, points, grad=False):
     """Construct the generalised Vandermonde matrix for polynomials of the
