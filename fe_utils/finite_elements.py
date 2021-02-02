@@ -45,13 +45,26 @@ def vandermonde_matrix(cell, degree, points, grad=False):
     The implementation of this function is left as an :ref:`exercise
     <ex-vandermonde>`.
     """
+    
     dim = cell.dim
-    if dim == 1:
-        a = lambda x : [x**i for i in range(degree + 1)]
-        return np.array([a(x) for (x,) in points])
+    assert dim <= 2
 
-    a = lambda x,y : np.concatenate([[x**i*y**j for i,j in zip(range(k,-1,-1),range(k+1))] for k in range(degree+1)])
-    return np.array([a(x,y) for (x,y) in points])
+    if not grad:
+        if dim == 1:
+            a = lambda x : [x**i for i in range(degree + 1)]
+            return np.array([a(x) for (x,) in points])
+
+        a = lambda x,y : np.concatenate([[x**i*y**j for i,j in zip(range(k,-1,-1),range(k+1))] for k in range(degree+1)])
+        return np.array([a(x,y) for (x,y) in points])
+    else:
+        if dim == 1:
+            grad_x = lambda x : np.array([(i*x**(i-1),) if i != 0 else (0,) for i in range(degree + 1)])
+            return np.array([grad_x(x) for (x,) in points])
+
+        grad_x = lambda x,y : np.concatenate([[i*x**(i-1)*y**j if i != 0 else 0  for i,j in zip(range(k,-1,-1),range(k+1))] for k in range(degree+1)])
+        grad_y = lambda x,y : np.concatenate([[(x**i)*j*y**(j-1) if j != 0 else 0 for i,j in zip(range(k,-1,-1),range(k+1))] for k in range(degree+1)])
+        
+        return np.array([np.array([grad_x(x,y),grad_y(x,y)]).T for (x,y) in points])
 
 
 
@@ -94,7 +107,7 @@ class FiniteElement(object):
         # Replace this exception with some code which sets
         # self.basis_coefs
         # to an array of polynomial coefficients defining the basis functions.
-        raise NotImplementedError
+        self.basis_coefs = np.linalg.inv(vandermonde_matrix(cell, degree,nodes))
 
         #: The number of nodes in this element.
         self.node_count = nodes.shape[0]
@@ -120,7 +133,7 @@ class FiniteElement(object):
 
         """
 
-        raise NotImplementedError
+        return np.matmul(vandermonde_matrix(self.cell, self.degree, points), self.basis_coefs)
 
     def interpolate(self, fn):
         """Interpolate fn onto this finite element by evaluating it
@@ -159,7 +172,7 @@ class LagrangeElement(FiniteElement):
         <ex-lagrange-element>`.
         """
 
-        raise NotImplementedError
+        nodes = lagrange_points(cell, degree)
         # Use lagrange_points to obtain the set of nodes.  Once you
         # have obtained nodes, the following line will call the
         # __init__ method on the FiniteElement class to set up the
