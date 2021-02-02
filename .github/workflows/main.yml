@@ -29,7 +29,9 @@ jobs:
       - name: set up venv
         run: scripts/fe_install_venv fe_venv
       - name: activate venv
-        run: source fe_venv/bin/activate
+        run: |
+          source fe_venv/bin/activate
+          ls
 
       # Runs a set of commands using the runners shell
       - name: run tests (as far as implemented)
