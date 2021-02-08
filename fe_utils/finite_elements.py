@@ -132,7 +132,10 @@ class FiniteElement(object):
         <ex-tabulate>`.
 
         """
-
+        if grad:
+            grad_vander = vandermonde_matrix(self.cell, self.degree, points, grad)
+            return np.einsum("ijk,jl->ilk", grad_vander, self.basis_coefs)
+            
         return np.matmul(vandermonde_matrix(self.cell, self.degree, points), self.basis_coefs)
 
     def interpolate(self, fn):
