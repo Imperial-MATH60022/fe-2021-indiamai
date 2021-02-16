@@ -35,7 +35,7 @@ class ReferenceCell(object):
         :param x: The coordinate vector of the point.
         :param e: The (d, i) pair describing the entity.
         """
-
+        
         vertices = self.topology[e[0]][e[1]]
 
         # Offset from first vertex.

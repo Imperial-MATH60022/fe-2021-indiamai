@@ -20,16 +20,23 @@ def lagrange_points(cell, degree):
 
     """
     dim = cell.dim
-    # limited to 1D and 2D
-    # if dim == 1:
-    #     return np.array([[i/degree] for i in range(degree+1)])
-    # indices1 = [[i/degree, j/degree] for i in range(degree+1) for j in range(degree+1) if i+j <= degree]
+    if dim == 1:
+        return np.array([[0],[1]] + [[i/degree] for i in range(1,degree)])
+    
+    # Generates in order of entity
+    interior = [x for x in range(1, degree)]
+    zeros = [0 for x in range(1, degree)]
 
-    # generalised dimension
-    it = itertools.product(*[[i for i in range(degree+1)] for j in range(dim)])
-    arr = np.array(list(it))
-    indices = arr[np.sum(arr,axis = 1) <=  degree]
-    return indices/degree
+    vertices = [(0,0), (degree,0), (0,degree)]
+    edges = list(zip(list(reversed(interior))+ zeros + interior , interior + interior + zeros )) 
+    faces = [(i,j) for i in interior for j in interior if i+j < degree]
+    indices = np.array(vertices + edges + faces)
+
+    # # generalised dimension (i can't bring myself to delete this yet)
+    # it = itertools.product(*[[i for i in range(degree+1)] for j in range(dim)])
+    # arr = np.array(list(it))
+    # indices = arr[np.sum(arr,axis = 1) <=  degree]/degree
+    return indices / degree
 
 def vandermonde_matrix(cell, degree, points, grad=False):
     """Construct the generalised Vandermonde matrix for polynomials of the
@@ -160,6 +167,25 @@ class FiniteElement(object):
                                self.cell,
                                self.degree)
 
+def compute_entity_nodes(lagrange_points, cell, degree):
+    # Lagrange points are in entity order so just need to allocate correct numbers
+    dim = cell.dim
+    entity_nodes = {}
+    indices = [x for x in range(len(lagrange_points))]
+
+    entity_nodes[0] = {i: [i] for i in range(dim+1)}
+    indices = indices[dim+1:]
+
+    if dim > 1:
+        entity_nodes[1] = {}
+        for i in range(dim+1):
+            entity_nodes[1][i] = indices[:(degree-1)]
+            indices = indices[degree-1:]
+
+    entity_nodes[dim] = {0 : indices}
+    return entity_nodes
+        
+
 
 class LagrangeElement(FiniteElement):
     def __init__(self, cell, degree):
@@ -180,4 +206,5 @@ class LagrangeElement(FiniteElement):
         # have obtained nodes, the following line will call the
         # __init__ method on the FiniteElement class to set up the
         # basis coefficients.
-        super(LagrangeElement, self).__init__(cell, degree, nodes)
+        entity_nodes = compute_entity_nodes(nodes, cell, degree)
+        super(LagrangeElement, self).__init__(cell, degree, nodes, entity_nodes)
