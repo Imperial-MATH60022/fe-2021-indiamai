@@ -2,6 +2,7 @@ from scipy.spatial import Delaunay
 import numpy as np
 import itertools
 from .finite_elements import LagrangeElement
+from .function_spaces import FunctionSpace
 from .reference_elements import ReferenceTriangle, ReferenceInterval
 
 
@@ -111,7 +112,13 @@ class Mesh(object):
         :result: The Jacobian for cell ``c``.
         """
 
-        raise NotImplementedError
+        cg1 = LagrangeElement(self.cell, 1)
+        print(len(cg1.basis_coefs))
+        cg1fs = FunctionSpace(self, cg1)
+        c_vertices = self.vertex_coords[cg1fs.cell_nodes[c, :], :]
+        tab_grad = cg1.tabulate([tuple([0 for i in range(self.dim)])], grad=True)
+        return np.einsum("ijk,jl->lk", tab_grad, c_vertices)
+
 
 
 class UnitIntervalMesh(Mesh):
