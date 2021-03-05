@@ -4,6 +4,7 @@ from .finite_elements import LagrangeElement, lagrange_points
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.tri import Triangulation
+from .quadrature import gauss_quadrature
 
 def G(mesh,element,d,i):
     N_d = element.nodes_per_entity[d]
@@ -14,10 +15,13 @@ def compute_cell_nodes(mesh,element):
     e = lambda delta, epsilon : element.entity_nodes[delta][epsilon]
 
     for c in range(mesh.cell_vertices.shape[0]):
-        for delta in range(element.cell.dim):
+        for delta in range(element.cell.dim + 1):
             for epsilon in range(element.cell.entity_counts[delta]):
-                i = mesh.adjacency(element.cell.dim, delta)[c, epsilon]
-                M[c][e(delta,epsilon)] = [G(mesh,element,delta, i) + j for j in range(element.nodes_per_entity[delta] )]
+                if delta == element.cell.dim and epsilon == 0:
+                    i = c
+                else:
+                    i = mesh.adjacency(element.cell.dim, delta)[c, epsilon]
+                M[c][e(delta,epsilon)] = [G(mesh,element,delta, i) + j for j in range(element.nodes_per_entity[delta])]
     return M
 
 class FunctionSpace(object):
@@ -45,6 +49,7 @@ class FunctionSpace(object):
         #: cell. The implementation of this member is left as an
         #: :ref:`exercise <ex-function-space>`
         self.cell_nodes = compute_cell_nodes(mesh,element)
+        print(self.cell_nodes)
 
         #: The total number of nodes in the function space.
         self.node_count = np.dot(element.nodes_per_entity, mesh.entity_counts)
@@ -180,4 +185,25 @@ class Function(object):
 
         :result: The integral (a scalar)."""
 
-        raise NotImplementedError
+        fs1 = self.function_space
+        fe1 = fs1.element
+        mesh = fs1.mesh
+
+        # Create a quadrature rule which is exact for (f1-f2)**2.
+        Q = gauss_quadrature(fe1.cell, 2*fe1.degree)
+
+        # Evaluate the local basis functions at the quadrature points.
+        phi = fe1.tabulate(Q.points)
+
+        val = 0.
+        for c in range(mesh.entity_counts[-1]):
+            # Find the appropriate global node numbers for this cell.
+            nodes1 = fs1.cell_nodes[c, :]
+
+            # Compute the change of coordinates.
+            J = mesh.jacobian(c)
+            detJ = np.abs(np.linalg.det(J))
+
+            # Compute the actual cell quadrature.
+            val += np.dot(np.dot(self.values[nodes1], phi.T), Q.weights) * detJ
+        return val

@@ -113,7 +113,6 @@ class Mesh(object):
         """
 
         cg1 = LagrangeElement(self.cell, 1)
-        print(len(cg1.basis_coefs))
         cg1fs = FunctionSpace(self, cg1)
         c_vertices = self.vertex_coords[cg1fs.cell_nodes[c, :], :]
         tab_grad = cg1.tabulate([tuple([0 for i in range(self.dim)])], grad=True)

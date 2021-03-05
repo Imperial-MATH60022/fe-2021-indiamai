@@ -40,3 +40,5 @@ jobs:
           "fe_venv/bin/python3"  test/test_06_vandermonde_matrix_grad.py
           "fe_venv/bin/python3"  test/test_07_tabulate_grad.py
           "fe_venv/bin/python3"  test/test_08_entity_nodes.py
+          "fe_venv/bin/python3"  test/test_09_jacobian.py
+          "fe_venv/bin/python3"  test/test_10_integrate.py
