@@ -15,8 +15,6 @@ def assemble(fs, f):
     the function space in which to solve and the right hand side
     function."""
 
-    raise NotImplementedError
-
     # Create an appropriate (complete) quadrature rule.
 
     # Tabulate the basis functions and their gradients at the quadrature points.
@@ -28,6 +26,35 @@ def assemble(fs, f):
     l = np.zeros(fs.node_count)
 
     # Now loop over all the cells and assemble A and l
+    fe = fs.element
+    mesh = fs.mesh
+
+    # Create a quadrature rule which is exact for (f1-f2)**2.
+    Q = gauss_quadrature(fe.cell, 2*fe.degree)
+
+    # Evaluate the local basis functions at the quadrature points.
+    phi = fe.tabulate(Q.points)
+    phi_grad = fe.tabulate(Q.points, grad=True)
+
+    val = 0.
+    for c in range(mesh.entity_counts[-1]):
+        # Find the appropriate global node numbers for this cell.
+        nodes = fs.cell_nodes[c, :]
+
+        # Compute the change of coordinates.
+        J = mesh.jacobian(c)
+        detJ = np.abs(np.linalg.det(J))
+
+        f_quadrature  = np.dot(f.values[nodes], phi.T)
+        l[nodes] += np.dot(phi.T, f_quadrature * Q.weights) * detJ 
+
+        phi_term = np.einsum("iq, jq -> ijq", phi.T, phi.T)
+        
+        inner_sum = np.zeros_like(phi_term)
+        grad_term = np.einsum("li, ijk -> ljk", np.linalg.inv(J.T), phi_grad.T)
+        for q in range(len(Q.weights)):
+            inner_sum[:,:,q] = np.dot(grad_term[:,:,q].T, grad_term[:,:,q]) 
+        A[np.ix_(nodes, nodes)] += np.dot(inner_sum + phi_term, Q.weights) * detJ 
 
     return A, l
 
@@ -70,7 +97,7 @@ def solve_helmholtz(degree, resolution, analytic=False, return_error=False):
 
     # Compute the L^2 error in the solution for testing purposes.
     error = errornorm(analytic_answer, u)
-
+    print(error)
     if return_error:
         u.values -= analytic_answer.values
 
