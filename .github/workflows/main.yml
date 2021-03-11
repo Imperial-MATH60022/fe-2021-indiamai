@@ -42,3 +42,4 @@ jobs:
           "fe_venv/bin/python3"  test/test_08_entity_nodes.py
           "fe_venv/bin/python3"  test/test_09_jacobian.py
           "fe_venv/bin/python3"  test/test_10_integrate_function.py
+          "fe_venv/bin/python3"  test/test_11_helmholtz_convergence.py
