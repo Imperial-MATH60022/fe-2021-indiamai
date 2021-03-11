@@ -49,7 +49,6 @@ class FunctionSpace(object):
         #: cell. The implementation of this member is left as an
         #: :ref:`exercise <ex-function-space>`
         self.cell_nodes = compute_cell_nodes(mesh,element)
-        print(self.cell_nodes)
 
         #: The total number of nodes in the function space.
         self.node_count = np.dot(element.nodes_per_entity, mesh.entity_counts)
