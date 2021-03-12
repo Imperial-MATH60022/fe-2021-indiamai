@@ -43,8 +43,8 @@ def assemble(fs, f):
 
         f_quadrature  = np.dot(f.values[nodes], phi.T)
         l[nodes] += np.dot(phi.T, f_quadrature * Q.weights) * detJ 
-        
-        inner_sum = np.zeros_like(phi_term)
+
+        inner_sum = np.zeros((phi.shape[1], phi.shape[1], phi.shape[0]))
         grad_term = np.einsum("li, ijk -> ljk", np.linalg.inv(J.T), phi_grad.T)
         for q in range(len(Q.weights)):
             inner_sum[:,:,q] = np.dot(grad_term[:,:,q].T, grad_term[:,:,q]) 

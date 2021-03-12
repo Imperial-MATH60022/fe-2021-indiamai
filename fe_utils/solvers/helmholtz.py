@@ -97,7 +97,7 @@ def solve_helmholtz(degree, resolution, analytic=False, return_error=False):
 
     # Compute the L^2 error in the solution for testing purposes.
     error = errornorm(analytic_answer, u)
-    print(error)
+
     if return_error:
         u.values -= analytic_answer.values
 
