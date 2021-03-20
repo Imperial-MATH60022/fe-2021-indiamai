@@ -44,7 +44,8 @@ def assemble(fs, f):
         # Compute the change of coordinates.
         J = mesh.jacobian(c)
         detJ = np.abs(np.linalg.det(J))
-
+        print(f.values[nodes].shape)
+        print(phi.T.shape)
         f_quadrature  = np.dot(f.values[nodes], phi.T)
         l[nodes] += np.dot(phi.T, f_quadrature * Q.weights) * detJ 
 

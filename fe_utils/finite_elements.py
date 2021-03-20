@@ -114,7 +114,7 @@ class FiniteElement(object):
         # Replace this exception with some code which sets
         # self.basis_coefs
         # to an array of polynomial coefficients defining the basis functions.
-        self.basis_coefs = np.linalg.inv(vandermonde_matrix(cell, degree,nodes))
+        self.basis_coefs = np.linalg.inv(vandermonde_matrix(cell, degree, nodes))
 
         #: The number of nodes in this element.
         self.node_count = nodes.shape[0]
@@ -208,3 +208,58 @@ class LagrangeElement(FiniteElement):
         # basis coefficients.
         entity_nodes = compute_entity_nodes(nodes, cell, degree)
         super(LagrangeElement, self).__init__(cell, degree, nodes, entity_nodes)
+
+def compute_vector_entity_nodes(lagrange_points, cell, degree):
+    # Lagrange points are in entity order so just need to allocate correct number pairs
+    dim = cell.dim
+    # if vector dimension is 1, entity nodes list is normal
+    if dim == 1:
+        return compute_entity_nodes(lagrange_points, cell, degree)
+    entity_nodes = {}
+    indices = [x for x in range(dim*len(lagrange_points))]
+
+    entity_nodes[0] = {i: [dim*i, dim*i + 1] for i in range(dim+1)}
+    indices = indices[dim*(dim+1):]
+
+    if dim > 1:
+        entity_nodes[1] = {}
+        for i in range(dim+1):
+            entity_nodes[1][i] = indices[:dim*(degree-1)]
+            indices = indices[dim*(degree-1):]
+
+    entity_nodes[dim] = {0 : indices}
+    return entity_nodes
+
+class VectorFiniteElement(FiniteElement):
+    def __init__(self, finite_element):
+        self.finite_element = finite_element
+
+        cell = finite_element.cell
+        degree = finite_element.degree
+        d = cell.dim
+        nodes = finite_element.nodes
+        entity_nodes = compute_vector_entity_nodes(nodes, cell, degree)
+        
+        super(VectorFiniteElement, self).__init__(cell, degree, nodes, entity_nodes)
+        self.node_weights = np.array([[[1,0],[0,1]] for i in range(len(nodes))]).reshape((len(nodes)*d, d))
+        self.nodes = np.array([[node for i in range(d)] for node in nodes]).reshape((len(nodes)*d, d))
+        
+
+        
+
+    def tabulate(self, points, grad=False):
+        tab = self.finite_element.tabulate(points, grad)
+        d = self.cell.dim
+        n = tab.shape[1]
+
+        if grad:
+            new_tab = np.zeros((tab.shape[0],  d, n*d, tab.shape[2]))
+        else:
+            new_tab = np.zeros((tab.shape[0],  d, n*d))
+        for i in range(d):
+            elems = [2*j + i for j in range(n)]
+            new_tab[:,i, elems] = tab
+        return new_tab
+
+    def interpolate(self, fn):
+        return [self.node_weights[i] @ fn(self.nodes[i]) for i in range(len(self.nodes))]
