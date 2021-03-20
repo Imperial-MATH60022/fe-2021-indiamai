@@ -9,7 +9,7 @@ def test_convergence():
     res = [2**i for i in range(4, 7)]
 
     error = [solve_mastery(r)[1] for r in res]
-
+    print(error)
     convergence_rate = np.array([np.log(error[i]/error[i+1])/np.log(res[i+1]/res[i])
                                  for i in range(len(res)-1)])
 

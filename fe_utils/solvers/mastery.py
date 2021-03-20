@@ -97,10 +97,13 @@ def solve_mastery(resolution, analytic=False, return_error=False):
     Q = FunctionSpace(mesh, qe)
 
     # # Create a function to hold the analytic solution for comparison purposes.
-    analytic_answer = Function(V)
+    u_analytic_answer = Function(V)
     # analytic_answer.interpolate(lambda x: cos(4*pi*x[0])*x[1]**2*(1.-x[1])**2)
-    analytic_answer.interpolate(lambda x: (-2*pi*(1 - cos(2*pi*x[0]))*sin(2*pi*x[1]),
+    u_analytic_answer.interpolate(lambda x: (-2*pi*(1 - cos(2*pi*x[0]))*sin(2*pi*x[1]),
                          2*pi*(1 - cos(2*pi*x[1]))*sin(2*pi*x[0])))
+    p_analytic_answer = Function(Q)
+    # analytic_answer.interpolate(lambda x: cos(4*pi*x[0])*x[1]**2*(1.-x[1])**2)
+    p_analytic_answer.interpolate(lambda x: 0)
 
     # # If the analytic answer has been requested then bail out now.
     # if analytic:
@@ -137,8 +140,10 @@ def solve_mastery(resolution, analytic=False, return_error=False):
     p.values[:] = res[V.node_count :]
 
     # Compute the L^2 error in the solution for testing purposes.
-    error = vectorerrornorm(analytic_answer, u)
-
+    u_error = vectorerrornorm(u_analytic_answer, u)
+    p_error = errornorm(p_analytic_answer, p)
+    error = u_error + p_error
+    
     if return_error:
         u.values -= analytic_answer.values
 
