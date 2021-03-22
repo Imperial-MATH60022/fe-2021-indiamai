@@ -67,8 +67,8 @@ def vectorerrornorm(f1, f2):
         # Compute the actual cell quadrature.
         first = np.einsum("i,ijk -> jk",f1.values[nodes1], phi.T)
         second = np.einsum("i,ijk -> jk",f2.values[nodes2], psi.T)
-        norm += np.sum(first @ np.diag(Q.weights) @ second.T) * detJ
-
+        diff = first - second
+        norm += np.sum(diff @ np.diag(Q.weights) @ diff.T) * detJ
     return norm**0.5
 
 

@@ -101,10 +101,9 @@ def solve_vector_valued(resolution, analytic=False, return_error=False):
 
     # Compute the L^2 error in the solution for testing purposes.
     error = vectorerrornorm(analytic_answer, u)
+
     if return_error:
         u.values -= analytic_answer.values
-    print(u.values)
-    grad_f.plot()
     # Return the solution and the error in the solution.
     return u, error
 
@@ -125,5 +124,4 @@ if __name__ == "__main__":
     plot_error = args.error
 
     u, error = solve_vector_valued(resolution, analytic, plot_error)
-    print(error)
     u.plot()
