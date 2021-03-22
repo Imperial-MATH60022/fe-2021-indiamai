@@ -98,9 +98,6 @@ def assemble(fs1,fs2, f):
 
     return A,B,rhs
 
-    return A, l
-
-
 
 def boundary_nodes(fs):
     """Find the list of boundary nodes in fs. This is a
