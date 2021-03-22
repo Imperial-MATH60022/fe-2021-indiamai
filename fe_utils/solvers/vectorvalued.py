@@ -1,0 +1,129 @@
+"""Solve a nonlinear problem using the finite element method.
+If run as a script, the result is plotted. This file can also be
+imported as a module and convergence tests run on the solver.
+"""
+from fe_utils import *
+import numpy as np
+from numpy import cos,sin, pi
+import scipy.sparse as sp
+import scipy.sparse.linalg as splinalg
+from argparse import ArgumentParser
+
+
+
+def assemble(fs, f):
+    """Assemble the finite element system for the Helmholtz problem given
+    the function space in which to solve and the right hand side
+    function."""
+
+    # Create an appropriate (complete) quadrature rule.
+
+    # Tabulate the basis functions and their gradients at the quadrature points.
+
+    # Create the left hand side matrix and right hand side vector.
+    # This creates a sparse matrix because creating a dense one may
+    # well run your machine out of memory!
+    A = sp.lil_matrix((fs.node_count, fs.node_count))
+    l = np.zeros(fs.node_count)
+
+    # Now loop over all the cells and assemble A and l
+    fe = fs.element
+    mesh = fs.mesh
+
+    # Create a quadrature rule which is exact for (f1-f2)**2.
+    Q = gauss_quadrature(fe.cell, 2*fe.degree)
+
+    # Evaluate the local basis functions at the quadrature points.
+    phi = fe.tabulate(Q.points)
+    phi_grad = fe.tabulate(Q.points, grad=True)
+
+    val = 0.
+    for c in range(mesh.entity_counts[-1]):
+        # Find the appropriate global node numbers for this cell.
+        nodes = fs.cell_nodes[c, :]
+
+        # Compute the change of coordinates.
+        J = mesh.jacobian(c)
+        detJ = np.abs(np.linalg.det(J))
+
+        f_quadrature = np.einsum("b, bdq -> dq", f.values[nodes], phi.T)
+        l[nodes] += np.einsum("bdq, dq -> b", phi.T, f_quadrature * Q.weights) * detJ 
+
+        inner_sum = np.zeros((len(nodes), len(nodes),len(Q.weights)))
+        for q in range(len(Q.weights)):
+            inner_sum[:,:,q] = np.dot(phi[q,:,:].T, phi[q,:,:]) 
+        A[np.ix_(nodes, nodes)] += np.dot(inner_sum, Q.weights) * detJ 
+
+    return A, l
+
+
+def solve_vector_valued(resolution, analytic=False, return_error=False):
+    """This function should solve the mastery problem with the given resolution. It
+    should return both the solution :class:`~fe_utils.function_spaces.Function` and
+    the :math:`L^2` error in the solution.
+
+    If ``analytic`` is ``True`` then it should not solve the equation
+    but instead return the analytic solution. If ``return_error`` is
+    true then the difference between the analytic solution and the
+    numerical solution should be returned in place of the solution.
+    """
+    
+    # Set up the mesh, finite element and function space required.
+    mesh = UnitSquareMesh(resolution, resolution)
+    fe = LagrangeElement(mesh.cell, 2)
+    ve = VectorFiniteElement(fe)
+    fs = FunctionSpace(mesh, ve)
+
+    # Create a function to hold the analytic solution for comparison purposes.
+    analytic_answer = Function(fs)
+    analytic_answer.interpolate(lambda x: (x[0],x[1]))
+
+    # If the analytic answer has been requested then bail out now.
+    if analytic:
+        return analytic_answer, 0.0
+
+    # Create the right hand side function and populate it with the
+    # correct values.
+    grad_f = Function(fs)
+    grad_f.interpolate(lambda x: (x[0],x[1]))
+
+    # Assemble the finite element system.
+    A, l = assemble(fs, grad_f)
+
+    # Create the function to hold the solution.
+    u = Function(fs)
+
+    # Cast the matrix to a sparse format and use a sparse solver for
+    # the linear system. This is vastly faster than the dense
+    # alternative.
+    A = sp.csr_matrix(A)
+    u.values[:] = splinalg.spsolve(A, l)
+
+    # Compute the L^2 error in the solution for testing purposes.
+    error = vectorerrornorm(analytic_answer, u)
+    if return_error:
+        u.values -= analytic_answer.values
+    print(u.values)
+    grad_f.plot()
+    # Return the solution and the error in the solution.
+    return u, error
+
+
+if __name__ == "__main__":
+
+    parser = ArgumentParser(
+        description="""Solve the mastery problem.""")
+    parser.add_argument("--analytic", action="store_true",
+                        help="Plot the analytic solution instead of solving the finite element problem.")
+    parser.add_argument("--error", action="store_true",
+                        help="Plot the error instead of the solution.")
+    parser.add_argument("resolution", type=int, nargs=1,
+                        help="The number of cells in each direction on the mesh.")
+    args = parser.parse_args()
+    resolution = args.resolution[0]
+    analytic = args.analytic
+    plot_error = args.error
+
+    u, error = solve_vector_valued(resolution, analytic, plot_error)
+    print(error)
+    u.plot()
