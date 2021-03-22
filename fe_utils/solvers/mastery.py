@@ -54,28 +54,83 @@ def assemble(fs1,fs2, f):
         # Compute the change of coordinates.
         J = mesh.jacobian(c)
         detJ = np.abs(np.linalg.det(J))
+        # b = basis, d = dimension, q= quadrature 
+        f_quadrature = np.einsum("b, bdq -> dq", f.values[nodes1], phi1.T)
+        l[nodes1] += np.einsum("bdq, dq -> b", phi1.T, f_quadrature * Q.weights) * detJ 
 
-        # self.values.reshape(-1, 2)
-        #   = np.dot(, phi.T)
-        f_quadrature = np.einsum("i, ijq -> jq", f.values[nodes1], phi1.T)
-        l[nodes1] += np.einsum("ijq, jq -> i", phi1.T, f_quadrature * Q.weights) * detJ 
+        # # i = gradient component
+        # # ji dimensions of jacobian
+        # J_phi = np.einsum("ji,bdqi -> bdqi", np.linalg.inv(J.T), phi1_grad)
+        # div = np.sum(np.array([J_phi[:, j, :, j] for j in range(d)]), axis=0)
+        # # c = basis of other space
+        # B[np.ix_(nodes2, nodes1)] += np.einsum("q, qc, qb -> cb", Q.weights, phi2, div) * detJ 
 
-        # print(phi1_grad[:, 0, :, 0].shape)
         div = np.array([phi1_grad[:, j, :, j] for j in range(d)])
         Jdiv = np.einsum("ij,jkm -> km", np.linalg.inv(J.T), div)
         B[np.ix_(nodes2, nodes1)] += np.einsum("i, ij, ik -> jk", Q.weights, phi2, Jdiv) * detJ 
 
-        # phi_term = np.einsum("iq, jq -> ijq", phi1.T, phi1.T)
+        # # phi_term = np.einsum("iq, jq -> ijq", phi1.T, phi1.T)
         
-        half_grad_term = np.einsum("li, ijkm -> ljkm", np.linalg.inv(J.T), phi1_grad.T)
-        half_grad_termT = np.einsum("ijkm -> kjim", half_grad_term)
+        # half_grad_term = np.einsum("li, ijkm -> ljkm", np.linalg.inv(J.T), phi1_grad.T)
+        half_grad_term = np.einsum("ji,bdqi -> bdqi", np.linalg.inv(J.T), phi1_grad)
+        half_grad_termT = np.einsum("bdqi -> biqd", half_grad_term)
+        # half_grad_termT = np.einsum("ljkm -> kjlm", half_grad_term)
         grad_term = (1/2)*(half_grad_term + half_grad_termT)
-
         
-        twice_sum = np.einsum("ijkm -> jm", grad_term * grad_term)
-        A[np.ix_(nodes1, nodes1)] += (twice_sum @ np.diag(Q.weights) @ twice_sum.T )* detJ 
+        # twice_sum = np.einsum("ijkm -> jm", grad_term * grad_term)
+        twice_sum = np.einsum("biqd ->bq ", grad_term * grad_term)
+        # twice_sum = np.einsum("ijkm -> ik", grad_term * grad_term)
+        # A[np.ix_(nodes1, nodes1)] += (twice_sum.T @ np.diag(Q.weights) @ twice_sum )* detJ 
+        A[np.ix_(nodes1, nodes1)] += np.einsum("i, ij, ik -> jk", Q.weights, twice_sum, twice_sum) * detJ 
+
+        # print(phi1_grad[:, 0, :, 0].shape)
+       
+
+        # phi_term = np.einsum("iq, jq -> ijq", phi1.T, phi1.T)
+
+        # half_grad_term = np.einsum("li, ijkm -> ljkm", np.linalg.inv(J.T), phi1_grad.T)
+        # half_grad_termT = np.einsum("ijkm -> kjim", half_grad_term)
+        # grad_term = (1/2)*(half_grad_term + half_grad_termT)
+
+
+        # twice_sum = np.einsum("ijkm -> jm", grad_term * grad_term)
+        # A[np.ix_(nodes1, nodes1)] += (twice_sum @ np.diag(Q.weights) @ twice_sum.T )* detJ 
 
     return A,B,rhs
+
+    return A, l
+
+
+
+def boundary_nodes(fs):
+    """Find the list of boundary nodes in fs. This is a
+    unit-square-specific solution. A more elegant solution would employ
+    the mesh topology and numbering.
+    """
+    eps = 1.e-10
+
+    f = Function(fs)
+
+    def on_boundary(x):
+        """Return 1 if on the boundary, 0. otherwise."""
+        if x[0] < eps or x[0] > 1 - eps or x[1] < eps or x[1] > 1 - eps:
+            return 1.
+        else:
+            return 0.
+    def on_boundary_vec(x):
+        """Return 1 if on the boundary, 0. otherwise."""
+        if x[0] < eps or x[0] > 1 - eps or x[1] < eps or x[1] > 1 - eps:
+            return [1.,1.]
+        else:
+            return [0.,0.]
+
+    if isinstance(fs.element, VectorFiniteElement):
+        f.interpolate(on_boundary_vec)
+    else:
+        f.interpolate(on_boundary)
+
+    return np.flatnonzero(f.values)
+
 
 def solve_mastery(resolution, analytic=False, return_error=False):
     """This function should solve the mastery problem with the given resolution. It
@@ -106,8 +161,8 @@ def solve_mastery(resolution, analytic=False, return_error=False):
     p_analytic_answer.interpolate(lambda x: 0)
 
     # # If the analytic answer has been requested then bail out now.
-    # if analytic:
-    #     return analytic_answer, 0.0
+    if analytic:
+        return (u_analytic_answer, p_analytic_answer), 0.0
 
     # Create the right hand side function and populate it with the
     # correct values.
@@ -131,6 +186,15 @@ def solve_mastery(resolution, analytic=False, return_error=False):
     p = Function(Q)
     M = sp.bmat([[A, B.T],[B, zero]], format='csc')
 
+    boundary1 = boundary_nodes(V)
+    # boundary2 = boundary_nodes(Q)
+    # print(boundary1)
+    boundary1 = np.append(boundary1, [V.node_count + 1])
+    # print(boundary1)
+    l[boundary1] = 0
+    M[boundary1] = np.zeros((len(boundary1), V.node_count + Q.node_count))
+    M[boundary1, boundary1] = np.ones(len(boundary1))
+
     # Cast the matrix to a sparse format and use a sparse solver for
     # the linear system. This is vastly faster than the dense
     # alternative.
@@ -143,7 +207,7 @@ def solve_mastery(resolution, analytic=False, return_error=False):
     u_error = vectorerrornorm(u_analytic_answer, u)
     p_error = errornorm(p_analytic_answer, p)
     error = u_error + p_error
-    
+
     if return_error:
         u.values -= analytic_answer.values
 
@@ -166,6 +230,7 @@ if __name__ == "__main__":
     analytic = args.analytic
     plot_error = args.error
 
-    u, error = solve_mastery(resolution, analytic, plot_error)
+    (u,p), error = solve_mastery(resolution, analytic, plot_error)
 
     u.plot()
+    # p.plot()
