@@ -37,7 +37,6 @@ def assemble(fs1,fs2, f):
 
     # Create a quadrature rule which is exact for (f1-f2)**2.
     Q = gauss_quadrature(fe1.cell, 2*max(fe1.degree, fe2.degree))
-    # Q2 = gauss_quadrature(fe2.cell, 2*max(fe1.degree, fe2.degree))
 
     # Evaluate the local basis functions at the quadrature points.
     phi1 = fe1.tabulate(Q.points)
@@ -54,47 +53,32 @@ def assemble(fs1,fs2, f):
         # Compute the change of coordinates.
         J = mesh.jacobian(c)
         detJ = np.abs(np.linalg.det(J))
-        # b = basis, d = dimension, q= quadrature 
-        f_quadrature = np.einsum("b, bdq -> dq", f.values[nodes1], phi1.T)
-        l[nodes1] += np.einsum("bdq, dq -> b", phi1.T, f_quadrature * Q.weights) * detJ 
+        # i = basis, a = dimension, q= quadrature 
+        f_quadrature = np.einsum("i, iaq -> aq", f.values[nodes1], phi1.T)
+        l[nodes1] += np.einsum("iaq, aq -> i", phi1.T, f_quadrature * Q.weights) * detJ 
 
-        # # i = gradient component
-        # # ji dimensions of jacobian
-        # J_phi = np.einsum("ji,bdqi -> bdqi", np.linalg.inv(J.T), phi1_grad)
-        # div = np.sum(np.array([J_phi[:, j, :, j] for j in range(d)]), axis=0)
-        # # c = basis of other space
-        # B[np.ix_(nodes2, nodes1)] += np.einsum("q, qc, qb -> cb", Q.weights, phi2, div) * detJ 
 
-        div = np.array([phi1_grad[:, j, :, j] for j in range(d)])
-        Jdiv = np.einsum("ij,jkm -> km", np.linalg.inv(J.T), div)
-        B[np.ix_(nodes2, nodes1)] += np.einsum("i, ij, ik -> jk", Q.weights, phi2, Jdiv) * detJ 
+        # c = gradient component
+        J_phi = np.einsum("bc,qaic -> qaib", np.linalg.inv(J.T), phi1_grad)
+        div = np.sum(np.array([J_phi[:, j, :, j] for j in range(d)]), axis=0)
+        div2 = np.einsum("ab,qbia->iq", np.linalg.inv(J), phi1_grad)
+        weighted_grad = np.einsum("q, iq ->iq", Q.weights, div2)
+        B[np.ix_(nodes2, nodes1)] += np.einsum("qi, qj ->ij", phi2, div)* detJ
 
-        # # phi_term = np.einsum("iq, jq -> ijq", phi1.T, phi1.T)
-        
-        # half_grad_term = np.einsum("li, ijkm -> ljkm", np.linalg.inv(J.T), phi1_grad.T)
-        half_grad_term = np.einsum("ji,bdqi -> bdqi", np.linalg.inv(J.T), phi1_grad)
-        half_grad_termT = np.einsum("bdqi -> biqd", half_grad_term)
-        # half_grad_termT = np.einsum("ljkm -> kjlm", half_grad_term)
+
+        half_grad_term = np.einsum("bc,qaic -> qaib", np.linalg.inv(J.T), phi1_grad)
+        half_grad_termT = np.einsum("qaib -> qbia", half_grad_term)
         grad_term = (1/2)*(half_grad_term + half_grad_termT)
-        
-        # twice_sum = np.einsum("ijkm -> jm", grad_term * grad_term)
-        twice_sum = np.einsum("biqd ->bq ", grad_term * grad_term)
-        # twice_sum = np.einsum("ijkm -> ik", grad_term * grad_term)
-        # A[np.ix_(nodes1, nodes1)] += (twice_sum.T @ np.diag(Q.weights) @ twice_sum )* detJ 
-        A[np.ix_(nodes1, nodes1)] += np.einsum("i, ij, ik -> jk", Q.weights, twice_sum, twice_sum) * detJ 
+        double_grad_term = (1/2)*(half_grad_term + half_grad_termT)
 
-        # print(phi1_grad[:, 0, :, 0].shape)
-       
-
-        # phi_term = np.einsum("iq, jq -> ijq", phi1.T, phi1.T)
-
-        # half_grad_term = np.einsum("li, ijkm -> ljkm", np.linalg.inv(J.T), phi1_grad.T)
-        # half_grad_termT = np.einsum("ijkm -> kjim", half_grad_term)
-        # grad_term = (1/2)*(half_grad_term + half_grad_termT)
-
-
-        # twice_sum = np.einsum("ijkm -> jm", grad_term * grad_term)
-        # A[np.ix_(nodes1, nodes1)] += (twice_sum @ np.diag(Q.weights) @ twice_sum.T )* detJ 
+        inner_sum = np.zeros((len(Q.weights), len(nodes1)))
+        for q in range(len(Q.weights)):
+            for i in range(len(nodes1)):
+                inner_sum[q,i] += np.sum(grad_term[q,:,i,:] * grad_term[q,:,i,:])
+        weighted_grad = np.einsum("q, qaib->qaib", Q.weights, grad_term)
+        otherA = np.einsum("q, qj, qi -> ji", Q.weights, inner_sum, inner_sum) * detJ 
+        A[np.ix_(nodes1, nodes1)] +=  np.einsum("qaib, qajb ->ij", weighted_grad, grad_term)* detJ 
+        # print(np.linalg.norm(np.einsum("qaib, qajb ->ij", weighted_grad, grad_term)* detJ - otherA ))
 
     return A,B,rhs
 
@@ -149,60 +133,63 @@ def solve_mastery(resolution, analytic=False, return_error=False):
     Q = FunctionSpace(mesh, qe)
 
     # # Create a function to hold the analytic solution for comparison purposes.
-    u_analytic_answer = Function(V)
-    # analytic_answer.interpolate(lambda x: cos(4*pi*x[0])*x[1]**2*(1.-x[1])**2)
-    u_analytic_answer.interpolate(lambda x: (-2*pi*(1 - cos(2*pi*x[0]))*sin(2*pi*x[1]),
-                         2*pi*(1 - cos(2*pi*x[1]))*sin(2*pi*x[0])))
+    # u_analytic_answer = Function(V)
+    # u_analytic_answer.interpolate(lambda x:(2*pi*sin(2*pi*x[0])*(cos(2*pi*x[1]) - 1), -2*pi*sin(2*pi*x[0])*(cos(2*pi*x[1]) - 1)))
+    # p_analytic_answer = Function(Q)
+    # p_analytic_answer.interpolate(lambda x: 1 - (1-cos(2*pi*x[0]))*(1-cos(2*pi*x[1])))
     p_analytic_answer = Function(Q)
-    # analytic_answer.interpolate(lambda x: cos(4*pi*x[0])*x[1]**2*(1.-x[1])**2)
     p_analytic_answer.interpolate(lambda x: 0)
+    u_analytic_answer = Function(V)
+    u_analytic_answer.interpolate(lambda x: (2*pi*(1 - cos(2*pi*x[0]))*sin(2*pi*x[1]),
+                                            -2*pi*(1 - cos(2*pi*x[1]))*sin(2*pi*x[0])))
 
     # # If the analytic answer has been requested then bail out now.
+    # p_analytic_answer.plot()
     if analytic:
         return (u_analytic_answer, p_analytic_answer), 0.0
 
+    
     # Create the right hand side function and populate it with the
     # correct values.
     f = Function(V)
-    # f.interpolate(lambda x: (2*pi*(1 - cos(2*pi*x[0]))*sin(2*pi*x[1]),
-    #                      -2*pi*(1 - cos(2*pi*x[1]))*sin(2*pi*x[0])))
-    firstterm = lambda x,y : -8*(pi**3)*cos(2*pi*x)*sin(2*pi*y)
-    secondterm = lambda x,y: 4*(pi**3)*(cos(2*pi*x)*sin(2*pi*y) + (1 - cos(2*pi*x))*sin(2*pi*y))
-    f.interpolate(lambda x: (firstterm(x[0], x[1]) + secondterm(x[0],x[1]),
-                         firstterm(x[1], x[0]) - secondterm(x[1],x[0])))
-
+    # first = lambda x,y: 4*pi**3*cos(2*pi*x)*sin(2*pi*y) - 4*pi**3*cos(2*pi*y)*sin(2*pi*x) - 8*pi**3*sin(2*pi*x)*(cos(2*pi*y) - 1) #+ 2*pi*cos(2*pi*x)*cos(2*pi*y)
+    # second =lambda x,y: 8*pi**3*cos(2*pi*y)*sin(2*pi*x) - 4*pi**3*cos(2*pi*x)*sin(2*pi*y) + 4*pi**3*sin(2*pi*x)*(cos(2*pi*y) - 1) #- 2*pi*sin(2*pi*x)*sin(2*pi*y)
+    # f.interpolate(lambda x: (first(x[0],x[1]), second(x[0],x[1])))
+    f.interpolate(lambda x: (2*pi*(1 - cos(2*pi*x[0]))*sin(2*pi*x[1]) ,
+                            -2*pi*(1 - cos(2*pi*x[1]))*sin(2*pi*x[0])) )
+                            # + 2*pi*sin(2*pi*x[0])*(cos(2*pi*x[1]) - 1)+ 2*pi*sin(2*pi*x[1])*(cos(2*pi*x[0]) - 1)
     # Assemble the finite element system.
     A,B,l = assemble(V,Q,f)
 
     # Create the function to hold the solution.
     zero = np.zeros((B.shape[0],B.shape[0]))
-    one = np.zeros((A.shape[0],A.shape[1]))
-    two = np.zeros((B.shape[1],B.shape[0]))
-    three = np.zeros((B.shape[0],B.shape[1]))
     u = Function(V)
     p = Function(Q)
-    M = sp.bmat([[A, B.T],[B, zero]], format='csc')
+    M = sp.bmat([[A, B.T],[B, zero]], format='lil')
 
     boundary1 = boundary_nodes(V)
-    # boundary2 = boundary_nodes(Q)
-    # print(boundary1)
     boundary1 = np.append(boundary1, [V.node_count + 1])
-    # print(boundary1)
     l[boundary1] = 0
     M[boundary1] = np.zeros((len(boundary1), V.node_count + Q.node_count))
     M[boundary1, boundary1] = np.ones(len(boundary1))
 
+
     # Cast the matrix to a sparse format and use a sparse solver for
     # the linear system. This is vastly faster than the dense
     # alternative.
+    M = sp.csc_matrix(M)
     lu = sp.linalg.splu(M)
     res = lu.solve(l)
     u.values[:] = res[: V.node_count]
     p.values[:] = res[V.node_count :]
 
     # Compute the L^2 error in the solution for testing purposes.
+    # u.plot()
+    # u_analytic_answer.plot()
     u_error = vectorerrornorm(u_analytic_answer, u)
+    print("u",u_error)
     p_error = errornorm(p_analytic_answer, p)
+    print("p",p_error)
     error = u_error + p_error
 
     if return_error:
@@ -228,6 +215,6 @@ if __name__ == "__main__":
     plot_error = args.error
 
     (u,p), error = solve_mastery(resolution, analytic, plot_error)
-
+   
     u.plot()
-    # p.plot()
+    p.plot()
