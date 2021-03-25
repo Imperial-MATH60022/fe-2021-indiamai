@@ -138,9 +138,9 @@ def solve_mastery(resolution, analytic=False, return_error=False):
     # Create the right hand side function and populate it with the
     # correct values.
     f = Function(V)
-    first = lambda x,y: 4*pi**3*cos(2*pi*x)*sin(2*pi*y) + 4*pi**3*sin(2*pi*y)*(cos(2*pi*x) - 1)
-    second = lambda x,y: - 4*pi**3*cos(2*pi*y)*sin(2*pi*x) - 4*pi**3*sin(2*pi*x)*(cos(2*pi*y) - 1)
-    f.interpolate(lambda x: (-first(x[0],x[1]), -second(x[0],x[1])))
+    first = lambda x,y: -4*pi**3*cos(2*pi*x)*sin(2*pi*y) - 4*pi**3*sin(2*pi*y)*(cos(2*pi*x) - 1)
+    second = lambda x,y: 4*pi**3*cos(2*pi*y)*sin(2*pi*x) + 4*pi**3*sin(2*pi*x)*(cos(2*pi*y) - 1)
+    f.interpolate(lambda x: (first(x[0],x[1]), second(x[0],x[1])))
 
     # Assemble the finite element system.
     A,B,l = assemble(V,Q,f)
