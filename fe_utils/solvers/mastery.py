@@ -152,7 +152,7 @@ def solve_mastery(resolution, analytic=False, return_error=False):
     M = sp.bmat([[A, B.T],[B, zero]], format='lil')
 
     boundary1 = boundary_nodes(V)
-    boundary1 = np.append(boundary1, [V.node_count + 1])
+    boundary1 = np.append(boundary1, [V.node_count + Q.node_count - 1])
     l[boundary1] = 0
     M[boundary1] = np.zeros((len(boundary1), V.node_count + Q.node_count))
     M[boundary1, boundary1] = np.ones(len(boundary1))
@@ -170,7 +170,7 @@ def solve_mastery(resolution, analytic=False, return_error=False):
     # Compute the L^2 error in the solution for testing purposes.
     u_error = vectorerrornorm(u_analytic_answer, u)
     p_error = errornorm(p_analytic_answer, p)
-    error = u_error + p_error
+    error = (u_error**2 + p_error**2)**0.5
 
     if return_error:
         u.values -= analytic_answer.values
@@ -195,6 +195,6 @@ if __name__ == "__main__":
     plot_error = args.error
 
     (u,p), error = solve_mastery(resolution, analytic, plot_error)
-   
+
     u.plot()
     p.plot()
