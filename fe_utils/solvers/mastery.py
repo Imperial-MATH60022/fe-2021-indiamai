@@ -53,33 +53,23 @@ def assemble(fs1,fs2, f):
         # Compute the change of coordinates.
         J = mesh.jacobian(c)
         detJ = np.abs(np.linalg.det(J))
+
         # i = basis, a = dimension, q= quadrature 
         f_quadrature = np.einsum("i, iaq -> aq", f.values[nodes1], phi1.T)
         l[nodes1] += np.einsum("iaq, aq -> i", phi1.T, f_quadrature * Q.weights) * detJ 
 
-
-        # c = gradient component
-        J_phi = np.einsum("bc,qaic -> qaib", np.linalg.inv(J.T), phi1_grad)
-        div = np.sum(np.array([J_phi[:, j, :, j] for j in range(d)]), axis=0)
-        div2 = np.einsum("ab,qbia->iq", np.linalg.inv(J), phi1_grad)
-        weighted_grad = np.einsum("q, iq ->iq", Q.weights, div2)
-        B[np.ix_(nodes2, nodes1)] += np.einsum("qi, qj ->ij", phi2, div)* detJ
+        
+        div = np.einsum("ab,qbia->iq", np.linalg.inv(J), phi1_grad)
+        weighted_grad = np.einsum("q, iq ->iq", Q.weights, div)
+        B[np.ix_(nodes2, nodes1)] += np.einsum("qi, jq ->ij", phi2, weighted_grad) * detJ
 
 
         half_grad_term = np.einsum("bc,qaic -> qaib", np.linalg.inv(J.T), phi1_grad)
         half_grad_termT = np.einsum("qaib -> qbia", half_grad_term)
         grad_term = (1/2)*(half_grad_term + half_grad_termT)
-        double_grad_term = (1/2)*(half_grad_term + half_grad_termT)
-
-        inner_sum = np.zeros((len(Q.weights), len(nodes1)))
-        for q in range(len(Q.weights)):
-            for i in range(len(nodes1)):
-                inner_sum[q,i] += np.sum(grad_term[q,:,i,:] * grad_term[q,:,i,:])
         weighted_grad = np.einsum("q, qaib->qaib", Q.weights, grad_term)
-        otherA = np.einsum("q, qj, qi -> ji", Q.weights, inner_sum, inner_sum) * detJ 
         A[np.ix_(nodes1, nodes1)] +=  np.einsum("qaib, qajb ->ij", weighted_grad, grad_term)* detJ 
-        # print(np.linalg.norm(np.einsum("qaib, qajb ->ij", weighted_grad, grad_term)* detJ - otherA ))
-
+        
     return A,B,rhs
 
 
@@ -133,18 +123,14 @@ def solve_mastery(resolution, analytic=False, return_error=False):
     Q = FunctionSpace(mesh, qe)
 
     # # Create a function to hold the analytic solution for comparison purposes.
-    # u_analytic_answer = Function(V)
-    # u_analytic_answer.interpolate(lambda x:(2*pi*sin(2*pi*x[0])*(cos(2*pi*x[1]) - 1), -2*pi*sin(2*pi*x[0])*(cos(2*pi*x[1]) - 1)))
-    # p_analytic_answer = Function(Q)
-    # p_analytic_answer.interpolate(lambda x: 1 - (1-cos(2*pi*x[0]))*(1-cos(2*pi*x[1])))
-    p_analytic_answer = Function(Q)
-    p_analytic_answer.interpolate(lambda x: 0)
     u_analytic_answer = Function(V)
     u_analytic_answer.interpolate(lambda x: (2*pi*(1 - cos(2*pi*x[0]))*sin(2*pi*x[1]),
                                             -2*pi*(1 - cos(2*pi*x[1]))*sin(2*pi*x[0])))
+    p_analytic_answer = Function(Q)
+    p_analytic_answer.interpolate(lambda x: 0)
+    
 
     # # If the analytic answer has been requested then bail out now.
-    # p_analytic_answer.plot()
     if analytic:
         return (u_analytic_answer, p_analytic_answer), 0.0
 
@@ -152,12 +138,10 @@ def solve_mastery(resolution, analytic=False, return_error=False):
     # Create the right hand side function and populate it with the
     # correct values.
     f = Function(V)
-    # first = lambda x,y: 4*pi**3*cos(2*pi*x)*sin(2*pi*y) - 4*pi**3*cos(2*pi*y)*sin(2*pi*x) - 8*pi**3*sin(2*pi*x)*(cos(2*pi*y) - 1) #+ 2*pi*cos(2*pi*x)*cos(2*pi*y)
-    # second =lambda x,y: 8*pi**3*cos(2*pi*y)*sin(2*pi*x) - 4*pi**3*cos(2*pi*x)*sin(2*pi*y) + 4*pi**3*sin(2*pi*x)*(cos(2*pi*y) - 1) #- 2*pi*sin(2*pi*x)*sin(2*pi*y)
-    # f.interpolate(lambda x: (first(x[0],x[1]), second(x[0],x[1])))
-    f.interpolate(lambda x: (2*pi*(1 - cos(2*pi*x[0]))*sin(2*pi*x[1]) ,
-                            -2*pi*(1 - cos(2*pi*x[1]))*sin(2*pi*x[0])) )
-                            # + 2*pi*sin(2*pi*x[0])*(cos(2*pi*x[1]) - 1)+ 2*pi*sin(2*pi*x[1])*(cos(2*pi*x[0]) - 1)
+    first = lambda x,y: 4*pi**3*cos(2*pi*x)*sin(2*pi*y) + 4*pi**3*sin(2*pi*y)*(cos(2*pi*x) - 1)
+    second = lambda x,y: - 4*pi**3*cos(2*pi*y)*sin(2*pi*x) - 4*pi**3*sin(2*pi*x)*(cos(2*pi*y) - 1)
+    f.interpolate(lambda x: (-first(x[0],x[1]), -second(x[0],x[1])))
+
     # Assemble the finite element system.
     A,B,l = assemble(V,Q,f)
 
@@ -184,12 +168,8 @@ def solve_mastery(resolution, analytic=False, return_error=False):
     p.values[:] = res[V.node_count :]
 
     # Compute the L^2 error in the solution for testing purposes.
-    # u.plot()
-    # u_analytic_answer.plot()
     u_error = vectorerrornorm(u_analytic_answer, u)
-    print("u",u_error)
     p_error = errornorm(p_analytic_answer, p)
-    print("p",p_error)
     error = u_error + p_error
 
     if return_error:
