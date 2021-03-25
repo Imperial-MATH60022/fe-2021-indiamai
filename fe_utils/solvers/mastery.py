@@ -122,7 +122,7 @@ def solve_mastery(resolution, analytic=False, return_error=False):
     V = FunctionSpace(mesh, ve)
     Q = FunctionSpace(mesh, qe)
 
-    # # Create a function to hold the analytic solution for comparison purposes.
+    # Create a function to hold the analytic solution for comparison purposes.
     u_analytic_answer = Function(V)
     u_analytic_answer.interpolate(lambda x: (2*pi*(1 - cos(2*pi*x[0]))*sin(2*pi*x[1]),
                                             -2*pi*(1 - cos(2*pi*x[1]))*sin(2*pi*x[0])))

@@ -100,11 +100,10 @@ class Function(object):
         for c in range(fs.mesh.entity_counts[-1]):
             # Interpolate the coordinates to the cell nodes.
             vertex_coords = fs.mesh.vertex_coords[cg1fs.cell_nodes[c, :], :]
+            node_coords = np.dot(coord_map, vertex_coords)
             if isinstance(fs.element, VectorFiniteElement):
-                node_coords = np.dot(coord_map, vertex_coords)
                 self.values[fs.cell_nodes[c, :]] = [fs.element.node_weights[i] @ fn(node_coords[i]) for i in range(len(node_coords))]
             else:
-                node_coords = np.dot(coord_map, vertex_coords)
                 self.values[fs.cell_nodes[c, :]] = [fn(x) for x in node_coords]
 
 

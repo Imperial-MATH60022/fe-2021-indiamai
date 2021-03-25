@@ -115,7 +115,6 @@ class Mesh(object):
         :result: The Jacobian for cell ``c``.
         """
 
-
         c_vertices = self.vertex_coords[self.cg1fs.cell_nodes[c, :], :]
         return np.einsum("ijk,jl->lk", self.tab_grad, c_vertices)
 

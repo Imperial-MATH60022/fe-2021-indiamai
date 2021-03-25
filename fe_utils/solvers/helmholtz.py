@@ -44,13 +44,10 @@ def assemble(fs, f):
         # Compute the change of coordinates.
         J = mesh.jacobian(c)
         detJ = np.abs(np.linalg.det(J))
-        print(f.values[nodes].shape)
-        print(phi.T.shape)
         f_quadrature  = np.dot(f.values[nodes], phi.T)
         l[nodes] += np.dot(phi.T, f_quadrature * Q.weights) * detJ 
 
         phi_term = np.einsum("iq, jq -> ijq", phi.T, phi.T)
-        
         inner_sum = np.zeros_like(phi_term)
         grad_term = np.einsum("li, ijk -> ljk", np.linalg.inv(J.T), phi_grad.T)
         for q in range(len(Q.weights)):
@@ -124,5 +121,4 @@ if __name__ == "__main__":
     plot_error = args.error
 
     u, error = solve_helmholtz(degree, resolution, analytic, plot_error)
-
     u.plot()

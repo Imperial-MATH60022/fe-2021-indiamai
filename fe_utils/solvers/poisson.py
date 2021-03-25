@@ -74,7 +74,6 @@ def boundary_nodes(fs):
             return 0.
 
     f.interpolate(on_boundary)
-
     return np.flatnonzero(f.values)
 
 
