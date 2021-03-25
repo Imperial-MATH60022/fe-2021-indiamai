@@ -2,6 +2,7 @@ from scipy.spatial import Delaunay
 import numpy as np
 import itertools
 from .finite_elements import LagrangeElement
+from .function_spaces import FunctionSpace
 from .reference_elements import ReferenceTriangle, ReferenceInterval
 
 
@@ -70,6 +71,9 @@ class Mesh(object):
         #: The :class:`~.reference_elements.ReferenceCell` of which this
         #: :class:`Mesh` is composed.
         self.cell = (0, ReferenceInterval, ReferenceTriangle)[self.dim]
+        self.cg1 = LagrangeElement(self.cell, 1)
+        self.cg1fs = FunctionSpace(self, self.cg1)
+        self.tab_grad = self.cg1.tabulate([tuple([0 for i in range(self.dim)])], grad=True)
 
     def adjacency(self, dim1, dim2):
         """Return the set of `dim2` entities adjacent to each `dim1`
@@ -111,7 +115,9 @@ class Mesh(object):
         :result: The Jacobian for cell ``c``.
         """
 
-        raise NotImplementedError
+        c_vertices = self.vertex_coords[self.cg1fs.cell_nodes[c, :], :]
+        return np.einsum("ijk,jl->lk", self.tab_grad, c_vertices)
+
 
 
 class UnitIntervalMesh(Mesh):

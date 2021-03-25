@@ -1,10 +1,28 @@
 import numpy as np
 from . import ReferenceTriangle, ReferenceInterval
-from .finite_elements import LagrangeElement, lagrange_points
+from .finite_elements import LagrangeElement, VectorFiniteElement, lagrange_points
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.tri import Triangulation
+from .quadrature import gauss_quadrature
 
+def G(mesh,element,d,i):
+    N_d = element.nodes_per_entity[d]
+    return sum([mesh.entity_counts[delta]*element.nodes_per_entity[delta] for delta in range(d)]) + i*N_d
+
+def compute_cell_nodes(mesh,element):
+    M = np.zeros((mesh.cell_vertices.shape[0],len(element.nodes)), dtype=int)
+    e = lambda delta, epsilon : element.entity_nodes[delta][epsilon]
+
+    for c in range(mesh.cell_vertices.shape[0]):
+        for delta in range(element.cell.dim + 1):
+            for epsilon in range(element.cell.entity_counts[delta]):
+                if delta == element.cell.dim and epsilon == 0:
+                    i = c
+                else:
+                    i = mesh.adjacency(element.cell.dim, delta)[c, epsilon]
+                M[c][e(delta,epsilon)] = [G(mesh,element,delta, i) + j for j in range(element.nodes_per_entity[delta])]
+    return M
 
 class FunctionSpace(object):
 
@@ -23,7 +41,6 @@ class FunctionSpace(object):
         #: The :class:`~.finite_elements.FiniteElement` of this space.
         self.element = element
 
-        raise NotImplementedError
 
         # Implement global numbering in order to produce the global
         # cell node list for this space.
@@ -31,7 +48,7 @@ class FunctionSpace(object):
         #: which each row lists the global nodes incident to the corresponding
         #: cell. The implementation of this member is left as an
         #: :ref:`exercise <ex-function-space>`
-        self.cell_nodes = None
+        self.cell_nodes = compute_cell_nodes(mesh,element)
 
         #: The total number of nodes in the function space.
         self.node_count = np.dot(element.nodes_per_entity, mesh.entity_counts)
@@ -84,8 +101,11 @@ class Function(object):
             # Interpolate the coordinates to the cell nodes.
             vertex_coords = fs.mesh.vertex_coords[cg1fs.cell_nodes[c, :], :]
             node_coords = np.dot(coord_map, vertex_coords)
+            if isinstance(fs.element, VectorFiniteElement):
+                self.values[fs.cell_nodes[c, :]] = [fs.element.node_weights[i] @ fn(node_coords[i]) for i in range(len(node_coords))]
+            else:
+                self.values[fs.cell_nodes[c, :]] = [fn(x) for x in node_coords]
 
-            self.values[fs.cell_nodes[c, :]] = [fn(x) for x in node_coords]
 
     def plot(self, subdivisions=None):
         """Plot the value of this :class:`Function`. This is quite a low
@@ -102,6 +122,17 @@ class Function(object):
         """
 
         fs = self.function_space
+
+        if isinstance(fs.element, VectorFiniteElement):
+            coords = Function(fs)
+            coords.interpolate(lambda x: x)
+            fig = plt.figure()
+            ax = fig.gca()
+            x = coords.values.reshape(-1, 2)
+            v = self.values.reshape(-1, 2)
+            plt.quiver(x[:, 0], x[:, 1], v[:, 0], v[:, 1])
+            plt.show()
+            return
 
         d = subdivisions or (2 * (fs.element.degree + 1) if fs.element.degree > 1 else 2)
 
@@ -167,4 +198,25 @@ class Function(object):
 
         :result: The integral (a scalar)."""
 
-        raise NotImplementedError
+        fs1 = self.function_space
+        fe1 = fs1.element
+        mesh = fs1.mesh
+
+        # Create a quadrature rule which is exact for (f1-f2)**2.
+        Q = gauss_quadrature(fe1.cell, 2*fe1.degree)
+
+        # Evaluate the local basis functions at the quadrature points.
+        phi = fe1.tabulate(Q.points)
+
+        val = 0.
+        for c in range(mesh.entity_counts[-1]):
+            # Find the appropriate global node numbers for this cell.
+            nodes1 = fs1.cell_nodes[c, :]
+
+            # Compute the change of coordinates.
+            J = mesh.jacobian(c)
+            detJ = np.abs(np.linalg.det(J))
+
+            # Compute the actual cell quadrature.
+            val += np.dot(np.dot(self.values[nodes1], phi.T), Q.weights) * detJ
+        return val

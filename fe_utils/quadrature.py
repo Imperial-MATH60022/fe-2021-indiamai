@@ -43,8 +43,8 @@ class QuadratureRule(object):
         The implementation of this method is left as an :ref:`exercise
         <ex-integrate>`.
         """
-
-        raise NotImplementedError
+        # raise "Not implemented error"
+        return sum([w*function(x) for (x,w) in zip(self.points,self.weights)])
 
 
 def gauss_quadrature(cell, degree):

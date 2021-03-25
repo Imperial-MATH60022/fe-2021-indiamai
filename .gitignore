@@ -8,3 +8,4 @@ doc/build/*
 doc/webgit
 doc/source/fe_utils.*
 doc/source/bibtex.json
+fe_utils/solvers/old_code.py
